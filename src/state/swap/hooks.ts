@@ -1,11 +1,11 @@
 import useENS from '../../hooks/useENS'
 import { Version } from '../../hooks/useToggledVersion'
 import { parseUnits } from '@ethersproject/units'
-import { Currency, CurrencyAmount, ETHER, JSBI, Token, TokenAmount, Trade } from '@kwikswap/sdk'
+import { Currency, CurrencyAmount, ETHER, JSBI, Token, TokenAmount, Trade } from '@pancakeswap-libs/sdk'
 import { ParsedQs } from 'qs'
 import { useCallback, useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { useVTrade } from '../../data/V'
+import { useV1Trade } from '../../data/V1'
 import { useActiveWeb3React } from '../../hooks'
 import { useCurrency } from '../../hooks/Tokens'
 import { useTradeExactIn, useTradeExactOut } from '../../hooks/Trades'
@@ -89,9 +89,9 @@ export function tryParseAmount(value?: string, currency?: Currency): CurrencyAmo
 }
 
 const BAD_RECIPIENT_ADDRESSES: string[] = [
-  '0xdD9EFCbDf9f422e2fc159eFe77aDD3730d48056d', // v1 factory 0xdD9EFCbDf9f422e2fc159eFe77aDD3730d48056d
-  '0x404A895237C97B75d4Cf96C8Ad9760687692613A', // v1 router 01 0x404A895237C97B75d4Cf96C8Ad9760687692613A
-  '0xFCDf5Cc307964fFaBfc14FBD2DC4FaD8e0Fe9f45' // v1 router 02 0xFCDf5Cc307964fFaBfc14FBD2DC4FaD8e0Fe9f45
+  '0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73', // v2 factory
+  '0xf164fC0Ec4E93095b804a4795bBe1e041497b92a', // v2 router 01
+  '0x10ED43C718714eb63d5aA57B78B54704E256024E' // v2 router 02
 ]
 
 /**
@@ -111,9 +111,9 @@ export function useDerivedSwapInfo(): {
   currencies: { [field in Field]?: Currency }
   currencyBalances: { [field in Field]?: CurrencyAmount }
   parsedAmount: CurrencyAmount | undefined
-  v1Trade: Trade | undefined
+  v2Trade: Trade | undefined
   inputError?: string
-  vTrade: Trade | undefined
+  v1Trade: Trade | undefined
 } {
   const { account } = useActiveWeb3React()
 
@@ -143,7 +143,7 @@ export function useDerivedSwapInfo(): {
   const bestTradeExactIn = useTradeExactIn(isExactIn ? parsedAmount : undefined, outputCurrency ?? undefined)
   const bestTradeExactOut = useTradeExactOut(inputCurrency ?? undefined, !isExactIn ? parsedAmount : undefined)
 
-  const v1Trade = isExactIn ? bestTradeExactIn : bestTradeExactOut
+  const v2Trade = isExactIn ? bestTradeExactIn : bestTradeExactOut
 
   const currencyBalances = {
     [Field.INPUT]: relevantTokenBalances[0],
@@ -155,8 +155,8 @@ export function useDerivedSwapInfo(): {
     [Field.OUTPUT]: outputCurrency ?? undefined
   }
 
-  // get link to trade on v, if a better rate exists
-  const vTrade = useVTrade(isExactIn, currencies[Field.INPUT], currencies[Field.OUTPUT], parsedAmount)
+  // get link to trade on v1, if a better rate exists
+  const v1Trade = useV1Trade(isExactIn, currencies[Field.INPUT], currencies[Field.OUTPUT], parsedAmount)
 
   let inputError: string | undefined
   if (!account) {
@@ -186,16 +186,17 @@ export function useDerivedSwapInfo(): {
 
   const [allowedSlippage] = useUserSlippageTolerance()
 
-  const slippageAdjustedAmounts = v1Trade && allowedSlippage && computeSlippageAdjustedAmounts(v1Trade, allowedSlippage)
+  const slippageAdjustedAmounts = v2Trade && allowedSlippage && computeSlippageAdjustedAmounts(v2Trade, allowedSlippage)
 
-  const slippageAdjustedAmountsV = vTrade && allowedSlippage && computeSlippageAdjustedAmounts(vTrade, allowedSlippage)
+  const slippageAdjustedAmountsV1 =
+    v1Trade && allowedSlippage && computeSlippageAdjustedAmounts(v1Trade, allowedSlippage)
 
   // compare input balance to max input based on version
   const [balanceIn, amountIn] = [
     currencyBalances[Field.INPUT],
-    toggledVersion === Version.v
-      ? slippageAdjustedAmountsV
-        ? slippageAdjustedAmountsV[Field.INPUT]
+    toggledVersion === Version.v1
+      ? slippageAdjustedAmountsV1
+        ? slippageAdjustedAmountsV1[Field.INPUT]
         : null
       : slippageAdjustedAmounts
       ? slippageAdjustedAmounts[Field.INPUT]
@@ -210,9 +211,9 @@ export function useDerivedSwapInfo(): {
     currencies,
     currencyBalances,
     parsedAmount,
-    v1Trade: v1Trade ?? undefined,
+    v2Trade: v2Trade ?? undefined,
     inputError,
-    vTrade
+    v1Trade
   }
 }
 
